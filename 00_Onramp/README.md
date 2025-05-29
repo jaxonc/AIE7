@@ -9,6 +9,7 @@ This folder contains materials for the **AI Engineer Onramp** — an optional 6-
 | 📰 Session Topic | ⏺️ Recording  | 🖼️ Slides     | 👨‍💻 Repo     | 📁 Feedback       |
 |:-----------------|:-------------|:--------------|:--------------|:-----------------|
 | Cursor and Git | [Recording](https://us02web.zoom.us/rec/share/l6PwntYu-sgqS23JB1s2ncV3L8lrSZrrwWDb3BJl0avCxP2VT6g-pFnZfXvmbYZV.4kfPtrdq4w5ZIKt5)  (NFFr#9z#) | [Onramp #1](https://www.canva.com/design/DAGnLn0SK1A/Gs5QWZWnq7lGNmtdHXP0pg/edit?utm_content=DAGnLn0SK1A&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton) | [Onramp01_Cursor_and_Git](https://github.com/AI-Maker-Space/AIE7/tree/main/00_Onramp/onramp01_Cursor_and_Git) | [4/15 Feedback](https://forms.gle/YdtPMkxRbqLnF7Tq9) |
+| Prompting and LLMs | [Recording](https://us02web.zoom.us/rec/share/3AExr2qavt50Qtt3ashzx-7Q3eANO6-J-ZjLH7dCgvDUc8z7o2NJOFD35wMqc28f.itShsf1NFrrBpY95)  (Dw#dF49x) | [Onramp #2](https://www.canva.com/design/DAGoHtUT3sA/BVVq2ayZVoHvOJ22_4ABBQ/edit?utm_content=DAGoHtUT3sA&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton) | [onramp02_Prompting](https://github.com/AI-Maker-Space/AIE7/tree/main/00_Onramp/onramp02_Prompting) | [4/22 Feedback](https://forms.gle/TFnU17GxzZTmmdT66) |
 
 ## 📅 Session Schedule
 Weekly sessions every Thursday (1 PM ET / 7 PM CET) leading up to Cohort 7 launch 🚀
