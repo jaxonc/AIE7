@@ -10,7 +10,7 @@ print("Hello, " + name + "!")
 #### ❓Question #2:
 # Where do you live?
 print("Where do you live?")
-location = "Tennessee"
+location = "T"
 print("I live in " + location + ".")
 
 
