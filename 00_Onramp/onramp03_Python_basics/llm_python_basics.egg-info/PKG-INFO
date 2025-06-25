@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: llm_python_basics
+Version: 0.1.0
+Summary: A learning notebook for LLM students to master Python basics
+Author: Kat & Vincent
+Requires-Dist: pandas
+Requires-Dist: matplotlib
+Requires-Dist: numpy
+Requires-Dist: python-dateutil
+Requires-Dist: jupyter

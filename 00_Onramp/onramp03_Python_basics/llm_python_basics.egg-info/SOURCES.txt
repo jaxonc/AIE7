@@ -1,0 +1,8 @@
+README.md
+app_student_activities.py
+pyproject.toml
+llm_python_basics.egg-info/PKG-INFO
+llm_python_basics.egg-info/SOURCES.txt
+llm_python_basics.egg-info/dependency_links.txt
+llm_python_basics.egg-info/requires.txt
+llm_python_basics.egg-info/top_level.txt
