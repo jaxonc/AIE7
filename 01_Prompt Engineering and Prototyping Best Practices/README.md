@@ -35,15 +35,27 @@ Each assignment will have a few of the following categories of exercises:
 
 Please evaluate your system on the following questions:
 
-1. Explain the concept of object-oriented programming in simple terms to a complete beginner. 
-    - Aspect Tested:
+1. Explain the concept of object-oriented programming (OOP) in simple terms to a complete beginner.
+    - Expected Answer: High level overview of OOP concepts that would be easy to understand and relatable to non programming concepts.
+    - Aspect Tested: 
+        Concept decomposition and audience tailoring
+            Translation of complex concepts to easily understandable explanations. 
 2. Read the following paragraph and provide a concise summary of the key points…
-    - Aspect Tested:
+    - Expected Answer: Few sentences detailing comprehensive overview of the Pokemon GO Terms of Service
+    - Aspect Tested: 
+        Summarization and condensing 
+            Ability to accurately generate TLDR summaries of dense text
 3. Write a short, imaginative story (100–150 words) about a robot finding friendship in an unexpected place.
-    - Aspect Tested:
+    - Expected Answer: Story that makes sense and adheres to the text limit and content description.
+    - Aspect Tested: 
+        "Creativity" and constraint acknowldegment
+            Ability to generate content that follows the expected conventions of a concept such as imaginative storytelling while also limiting the output to fit provided text constraints.
 4. If a store sells apples in packs of 4 and oranges in packs of 3, how many packs of each do I need to buy to get exactly 12 apples and 9 oranges?
-    - Aspect Tested:
+    - Expected Answer:
+    - Aspect Tested: 
+        Logical Reasoning 
 5. Rewrite the following paragraph in a professional, formal tone…
+    - Expected Answer:
     - Aspect Tested:
 
 This "vibe check" now serves as a baseline, of sorts, to help understand what holes your application has.
@@ -63,3 +75,9 @@ In essence, it's a first look to ensure your system isn't experiencing catastrop
 ##### 🧑‍🤝‍🧑❓ Discussion Question #1:
 
 What are some limitations of vibe checking as an evaluation tool?
+1. Ambiguity
+    - Though "vibe checking" can be useful for identifying gaps in a LLM-powered systems perfromance, the ambiguious nature of the prompts given can lead to over/under validating the "vibe" depending on the use case. 
+2. Improvement directionality
+    - Without clear performance metrics, it may be difficult to acertain useful methods to consider when addressing an LLM-powered system that was determined to give "bad vibes".
+3. Robustness
+    - Again while a useful initial check, given the non-comprehensive nature of "vibe checking" there are no guarantees your system will not fail at crucial functions provided a successful "vibe check". 
