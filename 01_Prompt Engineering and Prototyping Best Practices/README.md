@@ -37,26 +37,24 @@ Please evaluate your system on the following questions:
 
 1. Explain the concept of object-oriented programming (OOP) in simple terms to a complete beginner.
     - Expected Answer: High level overview of OOP concepts that would be easy to understand and relatable to non programming concepts.
-    - Aspect Tested: 
-        Concept decomposition and audience tailoring
-            Translation of complex concepts to easily understandable explanations. 
+    - Aspect Tested: Concept decomposition and audience tailoring
+        * Translation of complex concepts to easily understandable explanations. 
 2. Read the following paragraph and provide a concise summary of the key points…
     - Expected Answer: Few sentences detailing comprehensive overview of the Pokemon GO Terms of Service
-    - Aspect Tested: 
-        Summarization and condensing 
-            Ability to accurately generate TLDR summaries of dense text
+    - Aspect Tested: Summarization and condensing 
+        * Ability to accurately generate TLDR summaries of dense text
 3. Write a short, imaginative story (100–150 words) about a robot finding friendship in an unexpected place.
     - Expected Answer: Story that makes sense and adheres to the text limit and content description.
-    - Aspect Tested: 
-        "Creativity" and constraint acknowldegment
-            Ability to generate content that follows the expected conventions of a concept such as imaginative storytelling while also limiting the output to fit provided text constraints.
+    - Aspect Tested: "Creativity" and constraint acknowldegment
+        * Ability to generate content that follows the expected conventions of a concept such as imaginative storytelling while also limiting the output to fit provided text constraints.
 4. If a store sells apples in packs of 4 and oranges in packs of 3, how many packs of each do I need to buy to get exactly 12 apples and 9 oranges?
-    - Expected Answer:
-    - Aspect Tested: 
-        Logical Reasoning 
+    - Expected Answer: Correct answer and reasoning (given system promt does not say omit)
+    - Aspect Tested: Logical Reasoning and explainabilty 
+        * Ability to reason logically given a "simple" logical problem and explain how it came about the answer.
 5. Rewrite the following paragraph in a professional, formal tone…
-    - Expected Answer:
-    - Aspect Tested:
+    - Expected Answer: Re-written paragraph with no content added/deleted but translated to the requested tone.
+    - Aspect Tested: Tone translation
+        * Ability to translate or map tones while preserving information.
 
 This "vibe check" now serves as a baseline, of sorts, to help understand what holes your application has.
 
