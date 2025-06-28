@@ -173,15 +173,12 @@ class VectorDatabase:
         """Retrieve metadata by key."""
         return self.metadata.get(key, {})
 
-    async def abuild_from_list(self, list_of_text: List[str], auto_categorize: bool = True) -> "VectorDatabase":
-        """Build database from list of texts with optional automatic categorization."""
+    async def abuild_from_list(self, list_of_text: List[str]) -> "VectorDatabase":
+        """Build database from list of texts."""
         embeddings = await self.embedding_model.async_get_embeddings(list_of_text)
         for text, embedding in zip(list_of_text, embeddings):
             vector = np.array(embedding)
-            if auto_categorize:
-                self.insert_with_category(text, vector)
-            else:
-                self.insert(text, vector)
+            self.insert(text, vector)
         return self
 
     async def abuild_from_list_with_categories(
