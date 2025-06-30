@@ -5,6 +5,10 @@ from typing import List, Dict, Tuple, Set, Optional, Any
 import re
 from dataclasses import dataclass, field
 import asyncio
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 
 @dataclass
@@ -142,8 +146,79 @@ class KnowledgeGraphBuilder:
         
         print(f"📊 Knowledge graph built: {len(self.graph.nodes)} entities, {len(self.graph.edges)} relations")
     
-    def simple_clustering(self, num_clusters: int = 4) -> Dict[str, int]:
-        """Simple clustering based on entity types and connectivity."""
+    def create_graph_embeddings(self, num_features: int = 8) -> Dict[str, np.ndarray]:
+        """Create graph embeddings for entities based on graph structure and properties."""
+        if len(self.graph.nodes) == 0:
+            return {}
+        
+        embeddings = {}
+        
+        # Calculate graph metrics
+        pagerank_scores = nx.pagerank(self.graph, weight='weight') if len(self.graph.edges) > 0 else {}
+        clustering_coeffs = nx.clustering(self.graph, weight='weight')
+        degree_centrality = nx.degree_centrality(self.graph)
+        
+        # Entity type encoding
+        entity_types = list(set(entity.entity_type for entity in self.entities.values()))
+        type_to_idx = {t: i for i, t in enumerate(entity_types)}
+        
+        print(f"🎯 Creating graph embeddings with {num_features} features for {len(self.entities)} entities...")
+        
+        for entity_name, entity in self.entities.items():
+            if entity_name not in self.graph:
+                # Create default embedding for isolated entities
+                embedding = np.zeros(num_features)
+                embedding[0] = entity.frequency  # Frequency as first feature
+                embedding[1] = len(entity_types) if entity.entity_type not in type_to_idx else type_to_idx[entity.entity_type]
+                embeddings[entity_name] = embedding
+                continue
+            
+            # Feature vector construction
+            features = []
+            
+            # 1. Node degree (normalized)
+            degree = len(list(self.graph.neighbors(entity_name)))
+            features.append(float(degree))
+            
+            # 2. PageRank score
+            features.append(pagerank_scores.get(entity_name, 0.0))
+            
+            # 3. Clustering coefficient
+            features.append(clustering_coeffs.get(entity_name, 0.0))
+            
+            # 4. Degree centrality
+            features.append(degree_centrality.get(entity_name, 0.0))
+            
+            # 5. Entity frequency (log-scaled)
+            features.append(np.log1p(entity.frequency))
+            
+            # 6. Entity type (one-hot encoded - using index)
+            features.append(float(type_to_idx.get(entity.entity_type, 0)))
+            
+            # 7. Number of contexts (indicates how widely used the entity is)
+            features.append(float(len(entity.contexts)))
+            
+            # 8. Average edge weight (indicates strength of relationships)
+            if entity_name in self.graph:
+                edge_weights = [self.graph[entity_name][neighbor].get('weight', 1.0) 
+                              for neighbor in self.graph.neighbors(entity_name)]
+                avg_edge_weight = np.mean(edge_weights) if edge_weights else 0.0
+            else:
+                avg_edge_weight = 0.0
+            features.append(avg_edge_weight)
+            
+            # Pad or truncate to desired number of features
+            if len(features) < num_features:
+                features.extend([0.0] * (num_features - len(features)))
+            else:
+                features = features[:num_features]
+            
+            embeddings[entity_name] = np.array(features)
+        
+        return embeddings
+    
+    def kmeans_clustering(self, num_clusters: int = 4) -> Dict[str, int]:
+        """K-means clustering based on graph embeddings."""
         if len(self.graph.nodes) == 0:
             return {}
         
@@ -153,38 +228,32 @@ class KnowledgeGraphBuilder:
         if len(entity_names) < num_clusters:
             return {name: i for i, name in enumerate(entity_names)}
         
-        # Group entities by type first
-        type_groups: Dict[str, List[str]] = defaultdict(list)
-        for entity_name in entity_names:
-            entity_type = self.entities[entity_name].entity_type
-            type_groups[entity_type].append(entity_name)
+        print(f"🧠 Applying K-means clustering with graph embeddings...")
         
-        # Assign clusters based on entity types
-        entity_to_cluster = {}
-        cluster_id = 0
+        # Create graph embeddings
+        embeddings_dict = self.create_graph_embeddings()
         
-        for entity_type, entities in type_groups.items():
-            # If this type has many entities, split them into multiple clusters
-            if len(entities) > num_clusters // 2:
-                # Split by frequency - high frequency entities get separate clusters
-                entities_by_freq = [(e, self.entities[e].frequency) for e in entities]
-                entities_by_freq.sort(key=lambda x: x[1], reverse=True)
+        # Convert to matrix for scikit-learn
+        embedding_matrix = np.array([embeddings_dict[name] for name in entity_names])
+        
+        # Standardize features
+        scaler = StandardScaler()
+        embedding_matrix_scaled = scaler.fit_transform(embedding_matrix)
+        
+        # Apply K-means clustering
+        kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+        cluster_labels = kmeans.fit_predict(embedding_matrix_scaled)
                 
-                # Assign in round-robin fashion
-                for i, (entity, _) in enumerate(entities_by_freq):
-                    entity_to_cluster[entity] = (cluster_id + i) % num_clusters
-                cluster_id = (cluster_id + len(entities)) % num_clusters
-            else:
-                # Assign all entities of this type to the same cluster
-                for entity in entities:
-                    entity_to_cluster[entity] = cluster_id % num_clusters
-                cluster_id += 1
+        # Create entity to cluster mapping
+        entity_to_cluster = {entity_names[i]: int(cluster_labels[i]) for i in range(len(entity_names))}
+        
+        print(f"📊 K-means clustering completed: {len(set(cluster_labels))} clusters formed")
         
         return entity_to_cluster
     
     def assign_chunk_categories(self, num_clusters: int = 4) -> Dict[int, int]:
         """Assign categories to text chunks based on their entities' clusters."""
-        entity_clusters = self.simple_clustering(num_clusters)
+        entity_clusters = self.kmeans_clustering(num_clusters)
         chunk_categories = {}
         
         for chunk_idx, chunk_entities in self.chunk_entities.items():
@@ -205,9 +274,38 @@ class KnowledgeGraphBuilder:
         
         return chunk_categories
     
+    def get_semantic_cluster_name(self, cluster_id: int, cluster_info: Dict[str, Any]) -> str:
+        """Generate a semantic name for a cluster based on its top entities and keywords."""
+        if not cluster_info or not cluster_info.get('entities'):
+            return f"Cluster_{cluster_id}"
+        
+        # Get top entities (max 3)
+        top_entities = [e['name'] for e in cluster_info['entities'][:3]]
+        keywords = cluster_info.get('keywords', [])[:2]  # Max 2 keywords
+        
+        # Create semantic name based on most frequent entity
+        primary_entity = top_entities[0] if top_entities else "Unknown"
+        
+        # Generate descriptive name based on primary entity and keywords
+        if any(term in primary_entity.lower() for term in ['ceo', 'executive', 'hiring', 'manage']):
+            semantic_name = "Executive & Hiring"
+        elif any(term in primary_entity.lower() for term in ['startup', 'company', 'business']):
+            semantic_name = "Business & Strategy"
+        elif any(term in primary_entity.lower() for term in ['fund', 'invest', 'capital', 'market']):
+            semantic_name = "Funding & Markets"
+        elif any(term in primary_entity.lower() for term in ['product', 'team', 'operation']):
+            semantic_name = "Operations & Product"
+        else:
+            # Fallback: use primary entity as base
+            semantic_name = primary_entity.replace('_', ' ').title()
+        
+        # Add top entities for context
+        entity_context = ', '.join(top_entities)
+        return f"{semantic_name} ({entity_context})"
+    
     def get_cluster_descriptions(self, num_clusters: int = 4) -> Dict[int, Dict[str, Any]]:
         """Get descriptions for each cluster based on top entities and keywords."""
-        entity_clusters = self.simple_clustering(num_clusters)
+        entity_clusters = self.kmeans_clustering(num_clusters)
         cluster_info: Dict[int, Dict[str, Any]] = defaultdict(lambda: {'entities': [], 'keywords': [], 'size': 0})
         
         # Group entities by cluster
@@ -302,9 +400,10 @@ class KnowledgeGraphEnhancedVectorDB:
             category_id = chunk_categories.get(i, 0)
             
             # Create rich metadata with graph information
+            cluster_info = cluster_descriptions.get(category_id, {})
             metadata = {
                 'category_id': category_id,
-                'category_name': f"Cluster_{category_id}",
+                'category_name': self.knowledge_graph.get_semantic_cluster_name(category_id, cluster_info),
                 'entities': list(self.knowledge_graph.chunk_entities.get(i, set())),
                 'chunk_index': i
             }
@@ -373,13 +472,14 @@ class KnowledgeGraphEnhancedVectorDB:
     
     def get_categories(self) -> List[str]:
         """Get list of category names."""
-        return [f"Cluster_{i}" for i in self.cluster_categories.keys()]
+        return [self.knowledge_graph.get_semantic_cluster_name(category_id, self.cluster_categories.get(category_id, {})) for category_id in self.cluster_categories.keys()]
     
     def get_category_counts(self) -> Dict[str, int]:
         """Get counts per category."""
         counts: Dict[str, int] = defaultdict(int)
         for category_id in self.chunk_to_category.values():
-            counts[f"Cluster_{category_id}"] += 1
+            cluster_info = self.cluster_categories.get(category_id, {})
+            counts[self.knowledge_graph.get_semantic_cluster_name(category_id, cluster_info)] += 1
         return dict(counts)
     
     def get_related_entities_for_query(self, query: str) -> List[Tuple[str, float]]:
