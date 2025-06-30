@@ -210,30 +210,212 @@ class KnowledgeGraphBuilder:
         """Enhanced entity extraction - now calls the robust version."""
         return self.extract_entities_enhanced(text)
     
-    def extract_relations(self, text: str, entities: List[str]) -> List[Tuple[str, str, str]]:
-        """Extract relations between entities in the text."""
+    def _get_relationship_vocabulary(self) -> Set[str]:
+        """Get curated vocabulary of potential relationship words to limit discovery scope."""
+        return {
+            # Management & Leadership
+            'manages', 'leads', 'heads', 'directs', 'supervises', 'oversees', 'runs',
+            'manager', 'leader', 'head', 'director', 'supervisor', 'boss', 'chief',
+            
+            # Business relationships
+            'funds', 'invests', 'backs', 'supports', 'sponsors', 'finances',
+            'investor', 'funder', 'backer', 'sponsor', 'financier',
+            
+            # Collaboration
+            'partners', 'collaborates', 'works', 'teams', 'allies',
+            'partner', 'collaborator', 'ally', 'teammate', 'colleague',
+            
+            # Ownership & Foundation
+            'owns', 'founded', 'created', 'established', 'started', 'built',
+            'owner', 'founder', 'co-founder', 'creator', 'establisher', 'builder',
+            
+            # Advisory & Mentorship
+            'advises', 'mentors', 'guides', 'counsels', 'coaches', 'teaches',
+            'advisor', 'adviser', 'mentor', 'guide', 'counselor', 'coach', 'teacher',
+            
+            # Employment
+            'employs', 'hires', 'recruits', 'works-for', 'joins',
+            'employee', 'staff', 'hire', 'recruit', 'member',
+            
+            # Competition
+            'competes', 'rivals', 'challenges', 'battles', 'fights',
+            'competitor', 'rival', 'challenger',
+            
+            # Other business relations
+            'acquires', 'merges', 'buys', 'sells', 'trades',
+            'acquirer', 'buyer', 'seller', 'client', 'customer', 'supplier'
+        }
+
+    def _extract_dynamic_relations_from_patterns(self, sentence: str, entities: List[str]) -> List[Tuple[str, str, str]]:
+        """Extract relations using common linguistic patterns."""
         relations = []
+        vocabulary = self._get_relationship_vocabulary()
         
-        # Simple co-occurrence based relations
-        for i, entity1 in enumerate(entities):
-            for entity2 in entities[i+1:]:
-                # Check if entities co-occur in the same sentence
-                sentences = text.split('.')
-                for sentence in sentences:
-                    if entity1.lower() in sentence.lower() and entity2.lower() in sentence.lower():
-                        # Determine relation type based on keywords
-                        sentence_lower = sentence.lower()
-                        if any(word in sentence_lower for word in ['hire', 'recruit', 'manage']):
-                            relations.append((entity1, entity2, "MANAGES"))
-                        elif any(word in sentence_lower for word in ['fund', 'invest', 'capital']):
-                            relations.append((entity1, entity2, "FUNDS"))
-                        elif any(word in sentence_lower for word in ['compete', 'vs', 'against']):
-                            relations.append((entity1, entity2, "COMPETES_WITH"))
-                        else:
-                            relations.append((entity1, entity2, "RELATED_TO"))
-                        break
+        # Common relationship patterns
+        patterns = [
+            # Pattern: "X is RELATION of Y" 
+            r'(\w+)\s+is\s+(?:the\s+)?(\w+)\s+of\s+(\w+)',
+            # Pattern: "X, the RELATION of Y"
+            r'(\w+),?\s+the\s+(\w+)\s+of\s+(\w+)',
+            # Pattern: "X RELATION Y" (verb form)
+            r'(\w+)\s+(\w+s?)\s+(\w+)',
+            # Pattern: "RELATION X" (where X is entity)
+            r'(\w+)\s+(\w+)',
+        ]
+        
+        entities_lower = [e.lower() for e in entities]
+        
+        for pattern in patterns:
+            matches = re.finditer(pattern, sentence.lower())
+            for match in matches:
+                groups = match.groups()
+                
+                if len(groups) == 3:  # Three-part patterns
+                    entity1, relation_word, entity2 = groups
+                    
+                    # Check if both entities are in our list and relation word is in vocabulary
+                    if (entity1 in entities_lower and entity2 in entities_lower and 
+                        relation_word in vocabulary):
+                        
+                        # Convert back to original case
+                        entity1_orig = entities[entities_lower.index(entity1)]
+                        entity2_orig = entities[entities_lower.index(entity2)]
+                        
+                        # Normalize relation word to verb form if possible
+                        relation_type = self._normalize_relation_word(relation_word)
+                        relations.append((entity1_orig, entity2_orig, relation_type))
+                
+                elif len(groups) == 2:  # Two-part patterns  
+                    word1, word2 = groups
+                    
+                    # Try both orders to see which makes sense
+                    if word1 in vocabulary and word2 in entities_lower:
+                        entity_orig = entities[entities_lower.index(word2)]
+                        relation_type = self._normalize_relation_word(word1)
+                        # This pattern suggests a role, so we need context for the other entity
+                        # Skip for now as it's ambiguous
+                        continue
+                        
+                    elif word2 in vocabulary and word1 in entities_lower:
+                        entity_orig = entities[entities_lower.index(word1)]
+                        relation_type = self._normalize_relation_word(word2)
+                        # Same issue - ambiguous without second entity
+                        continue
         
         return relations
+
+    def _normalize_relation_word(self, word: str) -> str:
+        """Normalize relationship words to consistent forms."""
+        # Convert to uppercase and handle common variations
+        word = word.lower().strip()
+        
+        # Normalize to action/verb forms where possible
+        normalizations = {
+            'manager': 'MANAGES',
+            'leader': 'LEADS', 
+            'head': 'HEADS',
+            'director': 'DIRECTS',
+            'supervisor': 'SUPERVISES',
+            'boss': 'MANAGES',
+            'chief': 'HEADS',
+            
+            'investor': 'INVESTS_IN',
+            'funder': 'FUNDS',
+            'backer': 'BACKS',
+            'sponsor': 'SPONSORS',
+            
+            'partner': 'PARTNERS_WITH',
+            'collaborator': 'COLLABORATES_WITH',
+            'ally': 'ALLIES_WITH',
+            'teammate': 'TEAMS_WITH',
+            
+            'owner': 'OWNS',
+            'founder': 'FOUNDED',
+            'co-founder': 'CO_FOUNDED',
+            'creator': 'CREATED',
+            
+            'advisor': 'ADVISES',
+            'adviser': 'ADVISES',
+            'mentor': 'MENTORS',
+            'guide': 'GUIDES',
+            'coach': 'COACHES',
+            
+            'employee': 'WORKS_FOR',
+            'staff': 'WORKS_FOR',
+            'member': 'MEMBER_OF',
+            
+            'competitor': 'COMPETES_WITH',
+            'rival': 'RIVALS',
+            
+            'acquirer': 'ACQUIRES',
+            'buyer': 'BUYS',
+            'client': 'CLIENT_OF',
+            'customer': 'CUSTOMER_OF'
+        }
+        
+        if word in normalizations:
+            return normalizations[word]
+        
+        # For verb forms, convert to action form
+        if word.endswith('s') and len(word) > 3:
+            base_word = word[:-1]  # Remove 's'
+            return base_word.upper() + 'S'
+        
+        return word.upper()
+
+    def extract_relations(self, text: str, entities: List[str]) -> List[Tuple[str, str, str]]:
+        """Semi-dynamic relation extraction that discovers relations from linguistic patterns."""
+        if len(entities) < 2:
+            return []
+        
+        relations = []
+        
+        # Better sentence splitting
+        sentences = re.split(r'[.!?]+', text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        for sentence in sentences:
+            # Find entities in this sentence
+            entities_in_sentence = [e for e in entities if e.lower() in sentence.lower()]
+            
+            if len(entities_in_sentence) >= 2:
+                # First, try dynamic pattern-based extraction
+                dynamic_relations = self._extract_dynamic_relations_from_patterns(sentence, entities_in_sentence)
+                relations.extend(dynamic_relations)
+                
+                # For entity pairs without discovered relations, use co-occurrence
+                found_pairs = {(r[0], r[1]) for r in dynamic_relations}
+                
+                for i, entity1 in enumerate(entities_in_sentence):
+                    for entity2 in entities_in_sentence[i+1:]:
+                        if (entity1, entity2) not in found_pairs and (entity2, entity1) not in found_pairs:
+                            # Check for any relationship vocabulary in sentence
+                            vocabulary = self._get_relationship_vocabulary()
+                            sentence_words = sentence.lower().split()
+                            
+                            found_relation_word = None
+                            for word in sentence_words:
+                                if word in vocabulary:
+                                    found_relation_word = self._normalize_relation_word(word)
+                                    break
+                            
+                            if found_relation_word:
+                                relations.append((entity1, entity2, found_relation_word))
+                            else:
+                                # Fallback to generic relation
+                                relations.append((entity1, entity2, "RELATED_TO"))
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_relations = []
+        for relation in relations:
+            # Create a normalized key (smaller entity first to catch reverse duplicates)
+            key = tuple(sorted([relation[0], relation[1]]) + [relation[2]])
+            if key not in seen:
+                seen.add(key)
+                unique_relations.append(relation)
+        
+        return unique_relations
     
     def build_graph_from_texts(self, texts: List[str]) -> None:
         """Build knowledge graph from list of text chunks."""
