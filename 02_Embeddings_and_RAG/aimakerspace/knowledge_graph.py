@@ -7,8 +7,11 @@ from dataclasses import dataclass, field
 import asyncio
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from matplotlib.patches import FancyBboxPatch
+import warnings
+warnings.filterwarnings('ignore')
 
 
 @dataclass
@@ -140,7 +143,7 @@ class KnowledgeGraphBuilder:
         
         for pattern in patterns:
             matches = re.findall(pattern, text)
-            for match in matches:
+        for match in matches:
                 match_clean = match.strip()
                 if (
                     len(match_clean) > 2 and
@@ -362,7 +365,7 @@ class KnowledgeGraphBuilder:
             return base_word.upper() + 'S'
         
         return word.upper()
-
+    
     def extract_relations(self, text: str, entities: List[str]) -> List[Tuple[str, str, str]]:
         """Semi-dynamic relation extraction that discovers relations from linguistic patterns."""
         if len(entities) < 2:
@@ -401,9 +404,9 @@ class KnowledgeGraphBuilder:
                             
                             if found_relation_word:
                                 relations.append((entity1, entity2, found_relation_word))
-                            else:
+                        else:
                                 # Fallback to generic relation
-                                relations.append((entity1, entity2, "RELATED_TO"))
+                            relations.append((entity1, entity2, "RELATED_TO"))
         
         # Remove duplicates while preserving order
         seen = set()
@@ -831,6 +834,29 @@ class KnowledgeGraphBuilder:
         # Sort by boosted frequency and return top keywords
         filtered_words.sort(key=lambda x: x[1], reverse=True)
         return [word for word, _ in filtered_words[:max_keywords]]
+
+    def get_visualizer(self):
+        """
+        Get a KnowledgeGraphVisualizer instance for this knowledge graph.
+        
+        Returns:
+            KnowledgeGraphVisualizer: Visualizer instance for this graph
+            
+        Example:
+            >>> kg = KnowledgeGraphBuilder()
+            >>> kg.build_graph_from_texts(texts)
+            >>> viz = kg.get_visualizer()
+            >>> viz.visualize_graph()
+            >>> viz.visualize_clusters()
+        """
+        try:
+            # Import here to make matplotlib optional
+            from graph_visualizer import KnowledgeGraphVisualizer
+            return KnowledgeGraphVisualizer(self)
+        except ImportError as e:
+            print(f"❌ Could not import visualizer: {e}")
+            print("💡 Make sure graph_visualizer.py is available and matplotlib is installed")
+            return None
 
 
 class KnowledgeGraphEnhancedVectorDB:
