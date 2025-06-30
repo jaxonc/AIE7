@@ -40,6 +40,8 @@ class KnowledgeGraphBuilder:
         self.relations: List[Relation] = []
         self.text_chunks: List[str] = []
         self.chunk_entities: Dict[int, Set[str]] = defaultdict(set)
+        self._cached_entity_clusters: Optional[Dict[str, int]] = None
+        self._cached_num_clusters: Optional[int] = None
         
     def extract_entities_basic(self, text: str) -> List[Tuple[str, str]]:
         """Basic entity extraction without external dependencies."""
@@ -219,6 +221,11 @@ class KnowledgeGraphBuilder:
     
     def kmeans_clustering(self, num_clusters: int = 4) -> Dict[str, int]:
         """K-means clustering based on graph embeddings."""
+        # Check if we already have cached results for this number of clusters
+        if (self._cached_entity_clusters is not None and 
+            self._cached_num_clusters == num_clusters):
+            return self._cached_entity_clusters
+            
         if len(self.graph.nodes) == 0:
             return {}
         
@@ -226,7 +233,10 @@ class KnowledgeGraphBuilder:
         
         # If fewer entities than clusters, assign each to its own cluster
         if len(entity_names) < num_clusters:
-            return {name: i for i, name in enumerate(entity_names)}
+            result = {name: i for i, name in enumerate(entity_names)}
+            self._cached_entity_clusters = result
+            self._cached_num_clusters = num_clusters
+            return result
         
         print(f"🧠 Applying K-means clustering with graph embeddings...")
         
@@ -246,6 +256,10 @@ class KnowledgeGraphBuilder:
                 
         # Create entity to cluster mapping
         entity_to_cluster = {entity_names[i]: int(cluster_labels[i]) for i in range(len(entity_names))}
+        
+        # Cache the results
+        self._cached_entity_clusters = entity_to_cluster
+        self._cached_num_clusters = num_clusters
         
         print(f"📊 K-means clustering completed: {len(set(cluster_labels))} clusters formed")
         
