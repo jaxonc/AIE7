@@ -36,8 +36,6 @@ class KnowledgeGraphBuilder:
         self.relations: List[Relation] = []
         self.text_chunks: List[str] = []
         self.chunk_entities: Dict[int, Set[str]] = defaultdict(set)
-        self._cached_clustering: Optional[Dict[str, int]] = None
-        self._cached_num_clusters: Optional[int] = None
         
     def extract_entities_basic(self, text: str) -> List[Tuple[str, str]]:
         """Basic entity extraction without external dependencies."""
@@ -145,12 +143,7 @@ class KnowledgeGraphBuilder:
         print(f"📊 Knowledge graph built: {len(self.graph.nodes)} entities, {len(self.graph.edges)} relations")
     
     def simple_clustering(self, num_clusters: int = 4) -> Dict[str, int]:
-        """Graph-based community detection clustering using actual network structure."""
-        # Check cache first
-        if (self._cached_clustering is not None and 
-            self._cached_num_clusters == num_clusters):
-            return self._cached_clustering
-        
+        """Simple clustering based on entity types and connectivity."""
         if len(self.graph.nodes) == 0:
             return {}
         
@@ -158,111 +151,7 @@ class KnowledgeGraphBuilder:
         
         # If fewer entities than clusters, assign each to its own cluster
         if len(entity_names) < num_clusters:
-            result = {name: i for i, name in enumerate(entity_names)}
-            # Cache the result
-            self._cached_clustering = result
-            self._cached_num_clusters = num_clusters
-            return result
-        
-        try:
-            # Use NetworkX community detection algorithms
-            import networkx.algorithms.community as nx_community
-            
-            # Try Louvain community detection first (often gives better results)
-            try:
-                communities = list(nx_community.louvain_communities(self.graph, seed=42))
-                print(f"🔗 Louvain algorithm found {len(communities)} natural communities")
-            except:
-                # Fallback to greedy modularity if Louvain fails
-                communities = list(nx_community.greedy_modularity_communities(self.graph))
-                print(f"🔗 Greedy modularity found {len(communities)} natural communities")
-            
-            # Handle isolated nodes (nodes with no edges)
-            all_community_nodes = set()
-            for community in communities:
-                all_community_nodes.update(community)
-            
-            isolated_nodes = set(self.graph.nodes) - all_community_nodes
-            if isolated_nodes:
-                print(f"📍 Found {len(isolated_nodes)} isolated nodes, assigning to separate communities")
-                # Add isolated nodes as individual communities
-                for node in isolated_nodes:
-                    communities.append({node})
-            
-            # If we have too many communities, merge smaller ones
-            if len(communities) > num_clusters:
-                # Sort communities by size (number of nodes)
-                communities = sorted(communities, key=len, reverse=True)
-                # Keep the largest num_clusters-1 communities, merge the rest
-                main_communities = communities[:num_clusters-1]
-                merged_community = set()
-                for small_comm in communities[num_clusters-1:]:
-                    merged_community.update(small_comm)
-                if merged_community:
-                    main_communities.append(merged_community)
-                communities = main_communities
-                print(f"📊 Merged smaller communities to get {len(communities)} final clusters")
-            
-            # If we have too few communities, split the largest ones by frequency
-            elif len(communities) < num_clusters:
-                print(f"📈 Splitting largest communities to reach {num_clusters} clusters")
-                while len(communities) < num_clusters and any(len(comm) > 1 for comm in communities):
-                    # Find the largest community
-                    largest_idx = max(range(len(communities)), key=lambda i: len(communities[i]))
-                    largest_comm = communities[largest_idx]
-                    
-                    if len(largest_comm) == 1:
-                        break  # Can't split further
-                    
-                    # Split by frequency - high frequency vs low frequency entities
-                    comm_entities = [(entity, self.entities[entity].frequency) for entity in largest_comm]
-                    comm_entities.sort(key=lambda x: x[1], reverse=True)
-                    
-                    split_point = len(comm_entities) // 2
-                    high_freq = {entity for entity, _ in comm_entities[:split_point]}
-                    low_freq = {entity for entity, _ in comm_entities[split_point:]}
-                    
-                    # Replace the largest community with two smaller ones
-                    communities[largest_idx] = high_freq
-                    communities.append(low_freq)
-            
-            # Convert communities to entity -> cluster_id mapping
-            entity_to_cluster = {}
-            for cluster_id, community in enumerate(communities):
-                for entity in community:
-                    entity_to_cluster[entity] = cluster_id
-            
-            print(f"✅ Graph-based clustering complete: {len(communities)} clusters")
-            
-            # Print cluster summary
-            for i, community in enumerate(communities):
-                top_entities = sorted(community, key=lambda e: self.entities[e].frequency, reverse=True)[:3]
-                print(f"   Cluster {i}: {len(community)} entities (top: {', '.join(top_entities)})")
-            
-            # Cache the result
-            self._cached_clustering = entity_to_cluster
-            self._cached_num_clusters = num_clusters
-            
-            return entity_to_cluster
-            
-        except ImportError:
-            print("⚠️ NetworkX community detection not available, falling back to type-based clustering")
-            result = self._fallback_type_clustering(num_clusters)
-            # Cache the result
-            self._cached_clustering = result
-            self._cached_num_clusters = num_clusters
-            return result
-        except Exception as e:
-            print(f"⚠️ Graph clustering failed ({e}), falling back to type-based clustering")
-            result = self._fallback_type_clustering(num_clusters)
-            # Cache the result
-            self._cached_clustering = result
-            self._cached_num_clusters = num_clusters
-            return result
-    
-    def _fallback_type_clustering(self, num_clusters: int = 4) -> Dict[str, int]:
-        """Fallback type-based clustering method (original simple_clustering logic)."""
-        entity_names = list(self.entities.keys())
+            return {name: i for i, name in enumerate(entity_names)}
         
         # Group entities by type first
         type_groups: Dict[str, List[str]] = defaultdict(list)
@@ -356,66 +245,6 @@ class KnowledgeGraphBuilder:
         
         return dict(cluster_info)
     
-    async def generate_semantic_cluster_names(self, cluster_descriptions: Dict[int, Dict[str, Any]]) -> Dict[int, str]:
-        """Generate semantic cluster names using LLM based on cluster descriptions."""
-        try:
-            from aimakerspace.openai_utils.chatmodel import ChatOpenAI
-            
-            # Create LLM instance for naming
-            llm = ChatOpenAI(model_name="gpt-4o-mini")
-            
-            cluster_names = {}
-            
-            for cluster_id, info in cluster_descriptions.items():
-                top_entities = [e['name'] for e in info['entities'][:5]]
-                keywords = info['keywords'][:5]
-                
-                # Create prompt for semantic naming
-                naming_prompt = f"""Based on the following cluster information, generate a concise, descriptive name (2-4 words) that captures the main theme or concept of this cluster:
-
-Top Entities: {', '.join(top_entities)}
-Keywords: {', '.join(keywords)}
-Cluster Size: {info['size']} entities
-
-Requirements:
-- Use 2-4 words maximum
-- Be descriptive and professional
-- Capture the main business/topic theme
-- Avoid generic terms like "cluster" or "group"
-- Focus on the primary business concept
-
-Examples of good names:
-- "Executive Hiring & Management"
-- "Startup Strategy & Funding" 
-- "Product Development"
-- "Business Operations"
-
-Generate only the name, no explanation:"""
-
-                try:
-                    response = llm.run([{"role": "user", "content": naming_prompt}])
-                    semantic_name = response.strip().strip('"').strip("'")
-                    
-                    # Fallback if response is too long or seems invalid
-                    if len(semantic_name) > 50 or len(semantic_name.split()) > 6:
-                        semantic_name = f"Category {cluster_id}"
-                    
-                    cluster_names[cluster_id] = semantic_name
-                    print(f"🏷️ Cluster {cluster_id} → '{semantic_name}'")
-                    
-                except Exception as e:
-                    print(f"⚠️ Failed to generate name for cluster {cluster_id}: {e}")
-                    cluster_names[cluster_id] = f"Category {cluster_id}"
-            
-            return cluster_names
-            
-        except ImportError:
-            print("⚠️ ChatOpenAI not available, using default names")
-            return {cluster_id: f"Category {cluster_id}" for cluster_id in cluster_descriptions.keys()}
-        except Exception as e:
-            print(f"⚠️ Error generating semantic names: {e}")
-            return {cluster_id: f"Category {cluster_id}" for cluster_id in cluster_descriptions.keys()}
-    
     def get_related_entities(self, entity: str, max_results: int = 5) -> List[Tuple[str, float]]:
         """Get entities related to the given entity."""
         if entity not in self.graph:
@@ -449,7 +278,6 @@ class KnowledgeGraphEnhancedVectorDB:
         self.vector_db = VectorDatabase(embedding_model)
         self.knowledge_graph = KnowledgeGraphBuilder()
         self.cluster_categories: Dict[int, Dict[str, Any]] = {}
-        self.semantic_names: Dict[int, str] = {}
         self.chunk_to_category: Dict[int, int] = {}
         
     async def build_from_list(self, texts: List[str], num_categories: int = 4) -> "KnowledgeGraphEnhancedVectorDB":
@@ -459,18 +287,12 @@ class KnowledgeGraphEnhancedVectorDB:
         # Build knowledge graph
         self.knowledge_graph.build_graph_from_texts(texts)
         
-        # Get cluster-based categories and descriptions
-        print("🔗 Applying graph-based community detection clustering...")
+        # Get cluster-based categories
         chunk_categories = self.knowledge_graph.assign_chunk_categories(num_categories)
         cluster_descriptions = self.knowledge_graph.get_cluster_descriptions(num_categories)
         
-        # Generate semantic cluster names using LLM
-        print("🧠 Generating semantic cluster names...")
-        semantic_names = await self.knowledge_graph.generate_semantic_cluster_names(cluster_descriptions)
-        
         # Store category information
         self.cluster_categories = cluster_descriptions
-        self.semantic_names = semantic_names
         self.chunk_to_category = chunk_categories
         
         # Build vector database with graph-based categories
@@ -478,34 +300,32 @@ class KnowledgeGraphEnhancedVectorDB:
         for i, (text, embedding) in enumerate(zip(texts, embeddings)):
             vector = np.array(embedding)
             category_id = chunk_categories.get(i, 0)
-            semantic_name = semantic_names.get(category_id, f"Category {category_id}")
             
             # Create rich metadata with graph information
             metadata = {
                 'category_id': category_id,
-                'category_name': semantic_name,  # Now uses semantic name!
+                'category_name': f"Cluster_{category_id}",
                 'entities': list(self.knowledge_graph.chunk_entities.get(i, set())),
                 'chunk_index': i
             }
             
             self.vector_db.insert(text, vector, metadata)
         
-        print(f"✅ Enhanced database built with graph-based clustering")
+        print(f"✅ Enhanced database built with {num_categories} discovered categories")
         self._print_category_summary()
         
         return self
     
     def _print_category_summary(self):
-        """Print summary of discovered categories with semantic names."""
+        """Print summary of discovered categories."""
         print("\n📊 Discovered Categories:")
         print("=" * 60)
         
         for category_id, info in self.cluster_categories.items():
-            semantic_name = self.semantic_names.get(category_id, f"Category {category_id}")
             top_entities = [e['name'] for e in info['entities'][:3]]
             keywords = info['keywords'][:3]
             
-            print(f"🏷️  {semantic_name} ({info['size']} entities):")
+            print(f"🏷️  Category {category_id} ({info['size']} entities):")
             print(f"   Top entities: {', '.join(top_entities)}")
             print(f"   Keywords: {', '.join(keywords)}")
             print()
@@ -552,15 +372,14 @@ class KnowledgeGraphEnhancedVectorDB:
         return self.cluster_categories
     
     def get_categories(self) -> List[str]:
-        """Get list of semantic category names."""
-        return list(self.semantic_names.values())
+        """Get list of category names."""
+        return [f"Cluster_{i}" for i in self.cluster_categories.keys()]
     
     def get_category_counts(self) -> Dict[str, int]:
-        """Get counts per category using semantic names."""
+        """Get counts per category."""
         counts: Dict[str, int] = defaultdict(int)
         for category_id in self.chunk_to_category.values():
-            semantic_name = self.semantic_names.get(category_id, f"Category {category_id}")
-            counts[semantic_name] += 1
+            counts[f"Cluster_{category_id}"] += 1
         return dict(counts)
     
     def get_related_entities_for_query(self, query: str) -> List[Tuple[str, float]]:
@@ -579,33 +398,3 @@ class KnowledgeGraphEnhancedVectorDB:
                 unique_related[entity] = weight
         
         return sorted(unique_related.items(), key=lambda x: x[1], reverse=True)[:10] 
-    
-    def get_clustering_info(self) -> Dict[str, Any]:
-        """Get detailed information about the clustering results for validation."""
-        if not hasattr(self, 'cluster_categories'):
-            return {"error": "Clustering not yet performed"}
-        
-        # Calculate basic graph metrics
-        total_nodes = len(self.knowledge_graph.graph.nodes)
-        total_edges = len(self.knowledge_graph.graph.edges)
-        isolated_nodes = len([n for n in self.knowledge_graph.graph.nodes if self.knowledge_graph.graph.degree(n) == 0])
-        
-        clustering_info = {
-            "method": "Graph-based Community Detection (Louvain Algorithm)",
-            "total_clusters": len(self.cluster_categories),
-            "semantic_names": list(self.semantic_names.values()),
-            "cluster_sizes": {},
-            "graph_connectivity": {
-                "total_nodes": total_nodes,
-                "total_edges": total_edges,
-                "isolated_nodes": isolated_nodes,
-                "connected_nodes": total_nodes - isolated_nodes
-            }
-        }
-        
-        # Get cluster size distribution
-        for cluster_id, info in self.cluster_categories.items():
-            semantic_name = self.semantic_names.get(cluster_id, f"Category {cluster_id}")
-            clustering_info["cluster_sizes"][semantic_name] = info['size']
-        
-        return clustering_info 
