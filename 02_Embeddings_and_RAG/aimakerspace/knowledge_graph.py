@@ -43,32 +43,172 @@ class KnowledgeGraphBuilder:
         self._cached_entity_clusters: Optional[Dict[str, int]] = None
         self._cached_num_clusters: Optional[int] = None
         
-    def extract_entities_basic(self, text: str) -> List[Tuple[str, str]]:
-        """Basic entity extraction without external dependencies."""
+    def _get_entity_stop_words(self) -> Set[str]:
+        """Get stop words specifically for entity extraction."""
+        return {
+            # Common words that get capitalized but aren't entities
+            'the', 'this', 'that', 'these', 'those', 'a', 'an',
+            'when', 'what', 'where', 'why', 'how', 'who', 'which',
+            'part', 'section', 'chapter', 'page', 'line', 'paragraph',
+            'first', 'second', 'third', 'last', 'next', 'previous',
+            'many', 'most', 'some', 'all', 'each', 'every', 'any',
+            'new', 'old', 'big', 'small', 'large', 'great', 'good', 'best',
+            'today', 'tomorrow', 'yesterday', 'now', 'then', 'here', 'there',
+            'maybe', 'perhaps', 'however', 'therefore', 'meanwhile',
+            'according', 'during', 'through', 'within', 'without',
+            'another', 'other', 'others', 'such', 'same', 'different',
+            'following', 'above', 'below', 'around', 'between', 'among',
+            'including', 'regarding', 'concerning', 'considering',
+            'unfortunately', 'fortunately', 'obviously', 'certainly',
+            'probably', 'possibly', 'actually', 'really', 'truly',
+            'especially', 'particularly', 'specifically', 'generally'
+        }
+
+    def _get_expanded_business_terms(self) -> Dict[str, str]:
+        """Get comprehensive business terms with their entity types."""
+        return {
+            # Executive roles
+            'ceo': 'EXECUTIVE', 'chief executive officer': 'EXECUTIVE',
+            'cto': 'EXECUTIVE', 'chief technology officer': 'EXECUTIVE', 
+            'cfo': 'EXECUTIVE', 'chief financial officer': 'EXECUTIVE',
+            'coo': 'EXECUTIVE', 'chief operating officer': 'EXECUTIVE',
+            'cmo': 'EXECUTIVE', 'chief marketing officer': 'EXECUTIVE',
+            'vp': 'EXECUTIVE', 'vice president': 'EXECUTIVE',
+            'director': 'EXECUTIVE', 'managing director': 'EXECUTIVE',
+            'founder': 'EXECUTIVE', 'co-founder': 'EXECUTIVE',
+            'president': 'EXECUTIVE', 'chairman': 'EXECUTIVE',
+            
+            # Business entities
+            'startup': 'BUSINESS', 'company': 'BUSINESS', 'corporation': 'BUSINESS',
+            'business': 'BUSINESS', 'enterprise': 'BUSINESS', 'firm': 'BUSINESS',
+            'organization': 'BUSINESS', 'venture': 'BUSINESS', 'partnership': 'BUSINESS',
+            'unicorn': 'BUSINESS', 'scale-up': 'BUSINESS', 'spin-off': 'BUSINESS',
+            
+            # Funding and finance
+            'funding': 'FINANCE', 'investment': 'FINANCE', 'capital': 'FINANCE',
+            'venture capital': 'FINANCE', 'angel investor': 'FINANCE',
+            'series a': 'FINANCE', 'series b': 'FINANCE', 'series c': 'FINANCE',
+            'ipo': 'FINANCE', 'valuation': 'FINANCE', 'revenue': 'FINANCE',
+            'profit': 'FINANCE', 'equity': 'FINANCE', 'shares': 'FINANCE',
+            'round': 'FINANCE', 'seed funding': 'FINANCE', 'pre-seed': 'FINANCE',
+            
+            # People and roles
+            'employee': 'PERSON', 'staff': 'PERSON', 'team': 'PERSON',
+            'candidate': 'PERSON', 'hire': 'PERSON', 'recruit': 'PERSON',
+            'manager': 'PERSON', 'executive': 'PERSON', 'leader': 'PERSON',
+            'consultant': 'PERSON', 'advisor': 'PERSON', 'mentor': 'PERSON',
+            'intern': 'PERSON', 'contractor': 'PERSON', 'freelancer': 'PERSON',
+            
+            # Business operations
+            'strategy': 'CONCEPT', 'management': 'CONCEPT', 'leadership': 'CONCEPT',
+            'operations': 'CONCEPT', 'marketing': 'CONCEPT', 'sales': 'CONCEPT',
+            'product': 'CONCEPT', 'service': 'CONCEPT', 'platform': 'CONCEPT',
+            'technology': 'CONCEPT', 'innovation': 'CONCEPT', 'disruption': 'CONCEPT',
+            'growth': 'CONCEPT', 'scale': 'CONCEPT', 'expansion': 'CONCEPT',
+            'acquisition': 'CONCEPT', 'merger': 'CONCEPT', 'exit': 'CONCEPT',
+            
+            # Market and industry
+            'market': 'MARKET', 'industry': 'MARKET', 'sector': 'MARKET',
+            'customer': 'MARKET', 'client': 'MARKET', 'user': 'MARKET',
+            'competition': 'MARKET', 'competitor': 'MARKET', 'partnership': 'MARKET',
+            'ecosystem': 'MARKET', 'landscape': 'MARKET', 'segment': 'MARKET',
+            
+            # Process and methods
+            'hiring': 'PROCESS', 'recruitment': 'PROCESS', 'interview': 'PROCESS',
+            'onboarding': 'PROCESS', 'training': 'PROCESS', 'development': 'PROCESS',
+            'planning': 'PROCESS', 'execution': 'PROCESS', 'implementation': 'PROCESS',
+            'launch': 'PROCESS', 'pivot': 'PROCESS', 'iteration': 'PROCESS'
+        }
+
+    def extract_entities_enhanced(self, text: str) -> List[Tuple[str, str]]:
+        """Enhanced entity extraction with robust filtering and comprehensive business terms."""
         entities = []
+        entity_stop_words = self._get_entity_stop_words()
+        business_terms = self._get_expanded_business_terms()
         
-        # Extract capitalized words/phrases as potential entities
-        capitalized_pattern = r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b'
-        matches = re.findall(capitalized_pattern, text)
-        
-        for match in matches:
-            if len(match) > 2 and not match.lower() in ['The', 'This', 'That', 'Part', 'When', 'What', 'How']:
-                entities.append((match, "ENTITY"))
-        
-        # Extract common business terms
-        business_terms = [
-            "CEO", "CTO", "CFO", "VP", "startup", "company", "business", 
-            "funding", "venture capital", "hiring", "executive", "product",
-            "market", "customer", "revenue", "strategy", "management", "team",
-            "investor", "board", "employee", "candidate", "interview"
+        # 1. Extract capitalized phrases with better patterns
+        patterns = [
+            # Multi-word proper nouns (e.g., "John Smith", "Google Inc")
+            r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b',
+            # Single capitalized words (more selective)
+            r'\b[A-Z][a-z]{2,}\b',
+            # Acronyms (2-5 capital letters)
+            r'\b[A-Z]{2,5}\b',
+            # Title case with numbers (e.g., "Series A", "Web 2.0")
+            r'\b[A-Z][a-z]+\s*[0-9]+(?:\.[0-9]+)?\b'
         ]
         
+        for pattern in patterns:
+            matches = re.findall(pattern, text)
+            for match in matches:
+                match_clean = match.strip()
+                if (
+                    len(match_clean) > 2 and
+                    match_clean.lower() not in entity_stop_words and
+                    not match_clean.lower() in text.lower()[:30] and  # Avoid sentence starters
+                    (not match_clean.isupper() or len(match_clean) <= 5) and  # Allow short acronyms only
+                    not match_clean.endswith('.') and  # Avoid abbreviations
+                    not any(char.isdigit() for char in match_clean if '.' not in match_clean) and  # Allow version numbers
+                    not match_clean.lower() in ['engineering', 'series', 'capital', 'the', 'this', 'that'] and  # Additional common false positives
+                    not (len(match_clean) < 5 and match_clean.lower() in ['a', 'an', 'as', 'at', 'be', 'by', 'do', 'go', 'he', 'if', 'in', 'is', 'it', 'me', 'my', 'no', 'of', 'on', 'or', 'so', 'to', 'up', 'we'])
+                ):
+                    # Determine entity type based on context
+                    entity_type = "ENTITY"
+                    if any(role in match_clean.lower() for role in ['ceo', 'cto', 'cfo', 'founder', 'director']):
+                        entity_type = "EXECUTIVE"
+                    elif any(org in match_clean.lower() for org in ['inc', 'corp', 'ltd', 'llc', 'company']):
+                        entity_type = "BUSINESS"
+                    elif match_clean.isupper() and 2 <= len(match_clean) <= 5:
+                        entity_type = "ACRONYM"
+                    
+                    entities.append((match_clean, entity_type))
+        
+        # 2. Extract business terms with context awareness
         text_lower = text.lower()
-        for term in business_terms:
-            if term.lower() in text_lower:
-                entities.append((term.title(), "BUSINESS_TERM"))
-                
-        return entities
+        for term, term_type in business_terms.items():
+            if term in text_lower:
+                # Check context to ensure it's used as an entity, not just mentioned
+                term_positions = [m.start() for m in re.finditer(re.escape(term), text_lower)]
+                for pos in term_positions:
+                    # Extract context around the term
+                    context_start = max(0, pos - 20)
+                    context_end = min(len(text), pos + len(term) + 20)
+                    context = text[context_start:context_end].lower()
+                    
+                    # Entity validation based on context
+                    if (
+                        # Not in the middle of another word
+                        (pos == 0 or not text[pos-1].isalnum()) and
+                        (pos + len(term) >= len(text) or not text[pos + len(term)].isalnum()) and
+                        # Avoid overly generic usage
+                        not any(generic in context for generic in ['in general', 'for example', 'such as', 'like']) and
+                        # Prioritize specific business contexts
+                        (any(business in context for business in ['hire', 'manage', 'lead', 'fund', 'invest', 'startup']) or 
+                         term_type in ['EXECUTIVE', 'FINANCE', 'PROCESS'])
+                    ):
+                        entities.append((term.title(), term_type))
+                        break  # Only add once per term per text
+        
+        # 3. Remove duplicates and apply final quality filters
+        seen = set()
+        filtered_entities = []
+        for entity_text, entity_type in entities:
+            entity_key = entity_text.lower()
+            if (
+                entity_key not in seen and
+                len(entity_text) >= 2 and
+                len(entity_text) <= 50 and  # Reasonable length limits
+                not entity_text.lower() in ['we', 'our', 'us', 'you', 'your', 'they', 'them'] and
+                entity_text not in ['In', 'On', 'At', 'By', 'For', 'With', 'From', 'To']  # Common false positives
+            ):
+                seen.add(entity_key)
+                filtered_entities.append((entity_text, entity_type))
+        
+        return filtered_entities
+
+    def extract_entities_basic(self, text: str) -> List[Tuple[str, str]]:
+        """Enhanced entity extraction - now calls the robust version."""
+        return self.extract_entities_enhanced(text)
     
     def extract_relations(self, text: str, entities: List[str]) -> List[Tuple[str, str, str]]:
         """Extract relations between entities in the text."""
@@ -345,14 +485,8 @@ class KnowledgeGraphBuilder:
                 all_contexts.extend(self.entities[entity_name].contexts)
             
             if all_contexts:
-                # Simple keyword extraction
-                text = ' '.join(all_contexts).lower()
-                words = re.findall(r'\b[a-z]+\b', text)
-                word_freq = Counter(words)
-                # Filter out common words
-                stop_words = {'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were'}
-                keywords = [word for word, freq in word_freq.most_common(10) 
-                          if word not in stop_words and len(word) > 3]
+                # Extract robust keywords
+                keywords = self._extract_robust_keywords(all_contexts)
                 cluster_info[cluster_id]['keywords'] = keywords[:5]
         
         return dict(cluster_info)
@@ -380,6 +514,141 @@ class KnowledgeGraphBuilder:
                 expanded_terms.append(f"{query} {related_entity}")
         
         return expanded_terms[:max_expansions + 1]
+    
+    def _get_comprehensive_stop_words(self) -> Set[str]:
+        """Get a comprehensive set of stop words for keyword filtering."""
+        return {
+            # Articles
+            'a', 'an', 'the',
+            
+            # Conjunctions
+            'and', 'but', 'or', 'nor', 'for', 'yet', 'so',
+            
+            # Prepositions
+            'about', 'above', 'across', 'after', 'against', 'along', 'among', 'around', 'at', 
+            'before', 'behind', 'below', 'beneath', 'beside', 'between', 'beyond', 'by', 
+            'during', 'except', 'from', 'in', 'inside', 'into', 'like', 'near', 'of', 
+            'off', 'on', 'outside', 'over', 'through', 'to', 'toward', 'under', 'until', 
+            'up', 'upon', 'with', 'within', 'without',
+            
+            # Pronouns
+            'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 
+            'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 
+            'herself', 'it', 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves',
+            'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am', 'is', 'are',
+            
+            # Verbs (common forms)
+            'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing',
+            'will', 'would', 'should', 'could', 'can', 'may', 'might', 'must', 'shall',
+            'was', 'were', 'get', 'gets', 'got', 'getting', 'go', 'goes', 'went', 'going',
+            'make', 'makes', 'made', 'making', 'take', 'takes', 'took', 'taking',
+            'come', 'comes', 'came', 'coming', 'see', 'sees', 'saw', 'seeing', 'know', 
+            'knows', 'knew', 'knowing', 'think', 'thinks', 'thought', 'thinking',
+            
+            # Adverbs
+            'very', 'really', 'quite', 'too', 'so', 'just', 'only', 'also', 'still', 'even',
+            'now', 'then', 'here', 'there', 'where', 'when', 'why', 'how', 'all', 'any', 
+            'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor',
+            'not', 'only', 'own', 'same', 'than', 'too', 'well', 'as',
+            
+            # Question words
+            'what', 'where', 'when', 'why', 'who', 'whom', 'whose', 'which', 'how',
+            
+            # Common business filler words
+            'said', 'says', 'say', 'saying', 'tells', 'told', 'telling', 'ask', 'asked', 'asking',
+            'one', 'two', 'three', 'first', 'second', 'third', 'last', 'next', 'new', 'old',
+            'good', 'great', 'best', 'better', 'bad', 'worse', 'worst', 'big', 'small', 'large',
+            'little', 'long', 'short', 'high', 'low', 'right', 'left', 'early', 'late',
+            
+            # Time and frequency words
+            'today', 'yesterday', 'tomorrow', 'week', 'month', 'year', 'time', 'day', 'always',
+            'never', 'sometimes', 'often', 'usually', 'rarely', 'frequently', 'occasionally',
+            
+            # Common verbs that add little meaning
+            'use', 'used', 'using', 'work', 'works', 'worked', 'working', 'help', 'helps', 
+            'helped', 'helping', 'find', 'finds', 'found', 'finding', 'look', 'looks', 
+            'looked', 'looking', 'give', 'gives', 'gave', 'giving', 'put', 'puts', 'putting',
+            'keep', 'keeps', 'kept', 'keeping', 'let', 'lets', 'letting', 'try', 'tries', 
+            'tried', 'trying', 'seem', 'seems', 'seemed', 'seeming', 'feel', 'feels', 'felt',
+            'feeling', 'become', 'becomes', 'became', 'becoming', 'leave', 'leaves', 'left',
+            'leaving', 'move', 'moves', 'moved', 'moving', 'live', 'lives', 'lived', 'living',
+            'show', 'shows', 'showed', 'showing', 'hear', 'hears', 'heard', 'hearing',
+            'play', 'plays', 'played', 'playing', 'run', 'runs', 'ran', 'running', 'turn',
+            'turns', 'turned', 'turning', 'start', 'starts', 'started', 'starting', 'end',
+            'ends', 'ended', 'ending', 'stop', 'stops', 'stopped', 'stopping', 'follow',
+            'follows', 'followed', 'following', 'set', 'sets', 'setting', 'sit', 'sits',
+            'sat', 'sitting', 'stand', 'stands', 'stood', 'standing', 'meet', 'meets', 
+            'met', 'meeting', 'bring', 'brings', 'brought', 'bringing', 'happen', 'happens',
+            'happened', 'happening', 'write', 'writes', 'wrote', 'writing', 'provide',
+            'provides', 'provided', 'providing', 'serve', 'serves', 'served', 'serving',
+            
+            # Numbers and ordinals that are not meaningful as keywords
+            'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+            'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth',
+            
+            # Common adjectives that are too general
+            'different', 'same', 'important', 'possible', 'available', 'free', 'able', 'sure',
+            'certain', 'clear', 'easy', 'hard', 'difficult', 'simple', 'complex', 'basic',
+            'advanced', 'general', 'specific', 'special', 'particular', 'main', 'major', 'minor',
+            'whole', 'full', 'empty', 'open', 'close', 'closed', 'public', 'private', 'personal',
+            'social', 'final', 'current', 'recent', 'former', 'previous', 'original', 'additional',
+            
+            # Modal and auxiliary words
+            'might', 'may', 'could', 'would', 'should', 'must', 'ought', 'need', 'needs', 'needed', 'needing'
+        }
+        
+    def _extract_robust_keywords(self, contexts: List[str], max_keywords: int = 5) -> List[str]:
+        """Extract high-quality keywords from contexts with robust filtering."""
+        if not contexts:
+            return []
+        
+        # Combine all contexts
+        text = ' '.join(contexts).lower()
+        
+        # Extract words (alphanumeric with optional hyphens)
+        words = re.findall(r'\b[a-z][a-z0-9\-]*[a-z0-9]\b|\b[a-z]\b', text)
+        
+        # Get comprehensive stop words
+        stop_words = self._get_comprehensive_stop_words()
+        
+        # Count word frequencies
+        word_freq = Counter(words)
+        
+        # Filter words based on multiple criteria
+        filtered_words = []
+        for word, freq in word_freq.most_common(20):  # Consider top 20 to have more options
+            if (
+                # Basic filters
+                word not in stop_words and
+                len(word) >= 3 and  # Minimum length
+                len(word) <= 20 and  # Maximum length (avoid weird artifacts)
+                freq >= 2 and  # Must appear at least twice
+                
+                # Content quality filters
+                not word.isdigit() and  # Not just numbers
+                not word.startswith('http') and  # Not URLs
+                not word.endswith('.com') and  # Not domain names
+                not word.endswith('.org') and
+                not word.endswith('.net') and
+                word.count('-') <= 2 and  # Not overly hyphenated
+                
+                # Business domain relevance filters
+                not word in {'things', 'stuff', 'something', 'anything', 'everything', 'nothing'} and
+                (not word.startswith('re-') or word in {'revenue', 'resources', 'recruitment', 'research', 'requirements'}) and  # Allow meaningful re- words
+                
+                # Avoid overly generic business terms
+                word not in {'business', 'company', 'organization', 'industry', 'sector', 'market', 'field', 'area'}
+            ):
+                # Prioritize business-relevant terms
+                business_boost = 1
+                if any(domain in word for domain in ['tech', 'startup', 'fund', 'invest', 'hire', 'exec', 'manage', 'lead', 'strategy', 'growth']):
+                    business_boost = 2
+                
+                filtered_words.append((word, freq * business_boost))
+        
+        # Sort by boosted frequency and return top keywords
+        filtered_words.sort(key=lambda x: x[1], reverse=True)
+        return [word for word, _ in filtered_words[:max_keywords]]
 
 
 class KnowledgeGraphEnhancedVectorDB:
