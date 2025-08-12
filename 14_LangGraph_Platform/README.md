@@ -52,11 +52,17 @@ Run the repository and complete the following:
 #### ❓ Question:
 
 What is the purpose of the `chunk_overlap` parameter when using `RecursiveCharacterTextSplitter` to prepare documents for RAG, and what trade-offs arise as you increase or decrease its value?
+##### ✅ Answer:
+Create's overlap between contiguous chunks. Too much and you could add noise. Too little, and if actually needed, you could split related context.
 
 #### ❓ Question:
 
 Your retriever is configured with `search_kwargs={"k": 5}`. How would adjusting `k` likely affect RAGAS metrics such as Context Precision and Context Recall in practice, and why?
+##### ✅ Answer:
+For context precision, the more results the more likely there are non relevant results included. For context recall, more k means more opportunity for the LLM to generate context relevant claims.
 
 #### ❓ Question:
 
 Compare the `agent` and `agent_helpful` assistants defined in `langgraph.json`. Where does the helpfulness evaluator fit in the graph, and under what condition should execution route back to the agent vs. terminate?
+##### ✅ Answer:
+The helpfulness evaluator is a conditional edgde in between the helpfulness node and the agent node and the end node. It will go to end when the helpfulness node says the response was helpful and got back to the agent if not (unless no more cycles).
