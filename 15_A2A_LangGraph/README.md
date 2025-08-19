@@ -81,15 +81,21 @@ uv run python app/test_client.py
 
 Build a LangGraph Graph to "use" your application.
 
-Do this by creating a Simple Agent that can make API calls to the 🤖Agent Node above through the A2A protocol. 
+Do this by creating a Simple Agent that can make API calls to the 🤖Agent Node above through the A2A protocol.
+##### ✅ Answer:
+In simple_app.py 
 
 ### ❓ Question #1:
 
 What are the core components of an `AgentCard`?
+##### ✅ Answer:
+Description, i/o format, capabilities, and skills
 
 ### ❓ Question #2:
 
 Why is A2A (and other such protocols) important in your own words?
+##### ✅ Answer:
+I like to think of A2A as an analog to websites as MCP is to API. A provider can expose direct use to website funtionality through an API or require that you interact with the site to access the functionality for whatever reason.
 
 ### 🚧 Advanced Build:
 
